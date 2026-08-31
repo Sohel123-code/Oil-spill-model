@@ -4,6 +4,7 @@ emoji: 🛢️
 colorFrom: blue
 colorTo: green
 sdk: gradio
+sdk_version: 4.44.0
 app_file: app.py
 pinned: false
 license: mit
@@ -14,7 +15,8 @@ license: mit
 **ResNet-18 + Swin-Tiny hybrid deep learning model** for detecting oil spills in Sentinel-1 SAR imagery.
 
 ## Features
-- Drag-and-drop SAR image upload
+- Drag-and-drop batch SAR image upload
 - Automatic bounding box drawing using annotated pixel locations
-- Full coordinates & bounding box table (UL, UR, BR, BL)
-- Direct detected image download
+- Side-by-side detected card: image on left, full coordinates table on right
+- High-resolution Lightbox viewer with Raw vs Annotated toggle
+- Single-click detected image download
