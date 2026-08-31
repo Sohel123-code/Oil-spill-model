@@ -1,0 +1,12 @@
+# .gitignore
+photos/
+external/photos/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+env/
+.DS_Store
+Thumbs.db

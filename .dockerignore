@@ -1,0 +1,15 @@
+# .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+.env
+venv/
+env/
+photos/
+app.py
+cnn_swin_final.pth
+.DS_Store
+Thumbs.db
