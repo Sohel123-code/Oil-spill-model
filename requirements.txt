@@ -1,0 +1,11 @@
+# OilSight — FastAPI + custom HTML/CSS/JS frontend
+# CPU-only torch to keep Docker image lean
+
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+Pillow>=10.0.0
+pandas>=2.0.0
+timm>=1.0.0
+torch==2.3.0+cpu
+torchvision==0.18.0+cpu

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OilSight — SAR Oil Spill Detector</title>
+  <meta name="description" content="Detect oil spills in Sentinel-1 SAR imagery using a ResNet-18 + Swin-Tiny deep learning model." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛢️</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── HEADER ─────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">🛢️</div>
+        <div>
+          <div class="brand-name">OilSight</div>
+          <div class="brand-sub">SAR Oil Spill Detection System</div>
+        </div>
+      </div>
+      <div class="header-tags">
+        <span class="htag">ResNet-18</span>
+        <span class="htag">Swin-Tiny</span>
+        <span class="htag htag-accent">Sentinel-1</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── HERO ───────────────────────────────────────────── -->
+  <section class="hero">
+    <h1 class="hero-title">Detect Oil Spills<br/>from SAR Imagery</h1>
+    <p class="hero-desc">
+      Upload Sentinel-1 SAR images. Our <strong>ResNet-18 + Swin-Tiny hybrid model</strong>
+      classifies each image and retrieves object bounding-box coordinates from the annotated dataset.
+    </p>
+  </section>
+
+  <!-- ── MAIN ───────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Upload Zone -->
+    <div class="section-card upload-section" id="upload-section">
+      <div class="section-title">
+        <span class="section-icon">📤</span> Upload SAR Images
+      </div>
+      <div class="upload-zone" id="upload-zone" tabindex="0">
+        <div class="upload-content" id="upload-content">
+          <div class="upload-icon-wrap">
+            <div class="upload-circle">
+              <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="upload-text">
+            <span class="upload-title" id="upload-title">Drag & drop images here</span>
+            <span class="upload-hint" id="upload-hint">or <u>click to browse</u> · JPG, PNG, TIFF, BMP</span>
+          </div>
+        </div>
+        <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.tif,.tiff,.bmp" hidden />
+      </div>
+
+      <!-- Preview thumbnails (populated by JS) -->
+      <div class="preview-row" id="preview-row"></div>
+
+      <!-- Threshold + Analyse button (shown after files selected) -->
+      <div class="action-bar" id="action-bar">
+        <div class="threshold-group">
+          <label class="threshold-label" for="threshold-slider">
+            Confidence Threshold
+          </label>
+          <div class="threshold-control">
+            <input type="range" id="threshold-slider" class="slider" min="0.5" max="0.99" step="0.01" value="0.5" />
+            <span class="threshold-val" id="threshold-display">0.50</span>
+          </div>
+        </div>
+        <button class="btn-analyse" id="analyse-btn" disabled>
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <span>Analyse Images</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading (hidden by default, shown via JS class) -->
+    <div class="section-card loading-section" id="loading-section">
+      <div class="loader-ring"><div></div><div></div><div></div></div>
+      <span class="loading-text" id="loading-text">Analysing images…</span>
+    </div>
+
+    <!-- Summary Bar -->
+    <div class="section-card summary-section" id="summary-section">
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span class="summary-num" id="stat-total">0</span>
+          <span class="summary-label">Total</span>
+        </div>
+        <div class="summary-item summary-oil">
+          <span class="summary-num" id="stat-oil">0</span>
+          <span class="summary-label">🛢️ Oil Spill</span>
+        </div>
+        <div class="summary-item summary-clean">
+          <span class="summary-num" id="stat-clean">0</span>
+          <span class="summary-label">✅ Clean</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-num" id="stat-avg">—</span>
+          <span class="summary-label">Avg Confidence</span>
+        </div>
+      </div>
+      <button class="btn-reset" id="reset-btn">↺ New Analysis</button>
+    </div>
+
+    <!-- Results Grid -->
+    <div class="results-grid" id="results-grid"></div>
+
+  </main>
+
+  <!-- ── FOOTER ─────────────────────────────────────────── -->
+  <footer class="footer">
+    OilSight v2.0 · ResNet-18 + Swin-Tiny · Sentinel-1 SAR Dataset
+  </footer>
+
+
+  <!-- ── FULL IMAGE LIGHTBOX MODAL ───────────────────────── -->
+  <div class="lightbox-backdrop" id="lightbox-backdrop">
+    <div class="lightbox-dialog" role="dialog" aria-modal="true">
+      <div class="lightbox-header">
+        <div class="lightbox-title-wrap">
+          <span class="lightbox-title" id="lightbox-filename">Full Image View</span>
+          <span class="lightbox-badge" id="lightbox-badge">Oil Spill</span>
+        </div>
+        <div class="lightbox-actions">
+          <button class="btn-lightbox-toggle" id="lightbox-toggle-btn" title="Toggle between Detected (with boxes) and Raw image">
+            <span>⇄ View Raw Original</span>
+          </button>
+          <button class="btn-lightbox-dl" id="lightbox-dl-btn" title="Download this full image">
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span>Download</span>
+          </button>
+          <button class="lightbox-close" id="lightbox-close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div class="lightbox-body">
+        <img class="lightbox-img" id="lightbox-img" src="" alt="Full view" />
+      </div>
+      <div class="lightbox-footer">
+        <span id="lightbox-meta">Dimension: 640x640 · Click toggle to view raw SAR image</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
