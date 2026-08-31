@@ -11,6 +11,7 @@ import spaces
 
 # ── Standard imports ──────────────────────────────────────────────────────────
 import io
+import os
 import base64
 import time
 import torch
@@ -80,12 +81,42 @@ def _annotate(pil_img: Image.Image, pred_class: int, confidence: float, objects:
     return Image.alpha_composite(annotated, overlay).convert("RGB")
 
 
+def _resolve_geo_key(filepath: str) -> tuple[str, list]:
+    """
+    Given an uploaded file path (e.g. /tmp/gradio/abc/ow-0001.jpg),
+    extract the basename and try multiple lookup strategies against the geo_db.
+    Returns (matched_key, objects_list).
+    """
+    if not filepath:
+        return "", []
+
+    # Strategy 1: exact basename match  (ow-0001.jpg)
+    basename = os.path.basename(filepath).strip()
+    if basename in _geo_db:
+        return basename, _geo_db[basename]
+
+    # Strategy 2: case-insensitive match
+    basename_lower = basename.lower()
+    for key in _geo_db:
+        if key.lower() == basename_lower:
+            return key, _geo_db[key]
+
+    # Strategy 3: partial match — if basename contains a known key fragment
+    # e.g. uploaded as "my_ow-0001.jpg" still finds "ow-0001.jpg"
+    for key in _geo_db:
+        if key.lower() in basename_lower or basename_lower in key.lower():
+            return key, _geo_db[key]
+
+    return basename, []
+
+
 # ── ZeroGPU inference function: MUST be top-level with @spaces.GPU ───────────
 @spaces.GPU(duration=60)
-def predict_oil(image: Image.Image, filename: str, threshold: float):
+def predict_oil(image: Image.Image, filepath: str, threshold: float):
     """
     GPU-accelerated inference. Called directly by Gradio event.
     @spaces.GPU decorator is at TOP LEVEL — required for HF ZeroGPU detection.
+    filepath: the temp path of the uploaded file — used to extract filename for geo lookup.
     """
     if image is None:
         return None, "⚠️ Please upload a SAR image.", "", ""
@@ -110,9 +141,8 @@ def predict_oil(image: Image.Image, filename: str, threshold: float):
     prob_oil   = float(probs[1])
     prob_clean = float(probs[0])
 
-    # Geo-coordinate lookup by filename
-    fname_key = filename.strip() if filename else ""
-    objects = _geo_db.get(fname_key, [])
+    # Geo-coordinate lookup — auto-resolve from uploaded filepath
+    matched_key, objects = _resolve_geo_key(filepath or "")
 
     # Annotate image with bounding boxes
     annotated_img = _annotate(image, pred_class, confidence, objects)
@@ -140,6 +170,7 @@ def predict_oil(image: Image.Image, filename: str, threshold: float):
 | **Inference Time** | {elapsed_ms:.1f} ms |
 | **Objects Detected** | {len(objects)} |
 | **Resolution** | {image.width}×{image.height} |
+| **Filename Matched** | `{matched_key or 'none'}` |
 """
 
     # ── Geo-coordinates table ────────────────────────────────────────────────
@@ -203,15 +234,18 @@ with gr.Blocks(
     with gr.Row():
         # ── Left column: inputs ──────────────────────────────────────────────
         with gr.Column(scale=1):
+            # gr.File preserves the original filename (used for geo_db lookup)
+            # gr.Image renders the preview
+            file_input = gr.File(
+                label="📡 Upload SAR Image (preserves filename for geo lookup)",
+                file_types=["image"],
+                type="filepath",
+            )
             image_input = gr.Image(
                 type="pil",
-                label="📡 Upload SAR Image",
-                height=300,
-            )
-            filename_input = gr.Textbox(
-                label="Image Filename (for geo-coordinate lookup)",
-                placeholder="e.g. ow-0001.jpg",
-                info="Enter the exact filename to look up bounding box geo-coordinates from the database."
+                label="Image Preview",
+                height=260,
+                visible=True,
             )
             threshold_slider = gr.Slider(
                 minimum=0.1, maximum=0.9, value=0.5, step=0.05,
@@ -234,10 +268,19 @@ with gr.Blocks(
         with gr.Column(scale=1):
             coords_output = gr.HTML(label="📍 Geo-Coordinate Table")
 
+    # When a file is uploaded, sync the image preview
+    def _load_image(filepath):
+        if filepath is None:
+            return None
+        return Image.open(filepath)
+
+    file_input.change(fn=_load_image, inputs=file_input, outputs=image_input)
+
     # ── Event binding: Gradio button calls @spaces.GPU function directly ─────
+    # Pass filepath (not PIL image) so predict_oil can extract the original filename
     analyze_btn.click(
         fn=predict_oil,
-        inputs=[image_input, filename_input, threshold_slider],
+        inputs=[image_input, file_input, threshold_slider],
         outputs=[annotated_output, status_output, stats_output, coords_output],
     )
 
