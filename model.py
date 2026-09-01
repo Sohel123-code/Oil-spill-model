@@ -16,7 +16,7 @@ import timm
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "cnn_swin_best.pth")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "cnn_swin_v2_best.pth")
 DEVICE     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 CLASS_NAMES = ["No Oil Spill", "Oil Spill Detected"]
