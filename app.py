@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-\"\"\"
+"""
 app.py - OilSight SAR Oil Spill Detector (Hugging Face Spaces)
 
 Serves the identical HTML/CSS/JS frontend as localhost by mounting
@@ -8,7 +8,7 @@ ZeroGPU is preserved via @spaces.GPU on the inference function.
 
 IMPORTANT: import spaces and @spaces.GPU MUST be at top level
 for HF ZeroGPU runtime to detect them during startup AST scan.
-\"\"\"
+"""
 
 # ZeroGPU: MUST be imported unconditionally at top level
 import spaces
@@ -17,6 +17,7 @@ import io
 import base64
 import time
 import torch
+import torch.nn.functional as F
 import gradio as gr
 from pathlib import Path
 from fastapi import File, Form, UploadFile
@@ -27,36 +28,35 @@ from PIL import Image, ImageDraw, ImageFont
 from model import TRANSFORM, CLASS_NAMES, load_model
 from geo_db import load_geo_db
 
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = Path(__file__).parent / 'static'
 
-print("===== OilSight Startup =====")
+print('===== OilSight Startup =====')
 _model = load_model()
 _model.eval()
 _geo_db = load_geo_db()
-print(f"Geo DB ready - {len(_geo_db)} images indexed.")
+print(f'Geo DB ready - {len(_geo_db)} images indexed.')
 
 
 def _annotate_b64(pil_img, pred_class, confidence, objects):
-    \"\"\"Annotate image with bounding boxes and return base64 JPEG data URL.\"\"\"
-    annotated = pil_img.convert("RGBA")
+    annotated = pil_img.convert('RGBA')
     w, h = annotated.size
-    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    overlay = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     try:
-        font_large = ImageFont.truetype("arial.ttf", max(14, int(w * 0.024)))
-        font_small = ImageFont.truetype("arial.ttf", max(11, int(w * 0.018)))
+        font_large = ImageFont.truetype('arial.ttf', max(14, int(w * 0.024)))
+        font_small = ImageFont.truetype('arial.ttf', max(11, int(w * 0.018)))
     except Exception:
         font_large = ImageFont.load_default()
         font_small = ImageFont.load_default()
     is_oil = (pred_class == 1)
     for i, obj in enumerate(objects, 1):
-        pw = obj.get("patch_width", w) or w
-        ph = obj.get("patch_height", h) or h
+        pw = obj.get('patch_width', w) or w
+        ph = obj.get('patch_height', h) or h
         sx, sy = w / pw, h / ph
-        xmin = int(obj["xmin"] * sx)
-        ymin = int(obj["ymin"] * sy)
-        xmax = int(obj["xmax"] * sx)
-        ymax = int(obj["ymax"] * sy)
+        xmin = int(obj['xmin'] * sx)
+        ymin = int(obj['ymin'] * sy)
+        xmax = int(obj['xmax'] * sx)
+        ymax = int(obj['ymax'] * sy)
         xmin, xmax = max(0, min(xmin, xmax)), min(w, max(xmin, xmax))
         ymin, ymax = max(0, min(ymin, ymax)), min(h, max(ymin, ymax))
         draw.rectangle([xmin, ymin, xmax, ymax],
@@ -79,25 +79,23 @@ def _annotate_b64(pil_img, pred_class, confidence, objects):
     banner_h = 34
     banner_bg = (185, 28, 28, 220) if is_oil else (22, 101, 52, 220)
     if is_oil:
-        status_str = f"OIL SPILL DETECTED  |  Conf: {confidence*100:.1f}%  |  Objects: {len(objects)}"
+        status_str = f'OIL SPILL DETECTED | Conf: {confidence*100:.1f}% | Objects: {len(objects)}'
     else:
-        status_str = f"NO OIL SPILL  |  Conf: {confidence*100:.1f}%"
+        status_str = f'NO OIL SPILL | Conf: {confidence*100:.1f}%'
     draw.rectangle([0, 0, w, banner_h], fill=banner_bg)
-    draw.text((12, 8), f"OilSight SAR  |  {status_str}",
+    draw.text((12, 8), f'OilSight SAR | {status_str}',
               fill=(255, 255, 255, 255), font=font_large)
-    final_img = Image.alpha_composite(annotated, overlay).convert("RGB")
+    final_img = Image.alpha_composite(annotated, overlay).convert('RGB')
     buf = io.BytesIO()
-    final_img.save(buf, format="JPEG", quality=92)
-    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    final_img.save(buf, format='JPEG', quality=92)
+    return 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
 
 
 @spaces.GPU(duration=60)
 def _run_inference(tensor):
-    \"\"\"GPU-accelerated forward pass via ZeroGPU.\"\"\"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     _model.to(device)
     tensor = tensor.to(device)
-    import torch.nn.functional as F
     with torch.no_grad():
         logits = _model(tensor)
         probs = F.softmax(logits, dim=1)[0].cpu().numpy()
@@ -105,9 +103,8 @@ def _run_inference(tensor):
 
 
 def _infer(pil_img, filename, threshold):
-    \"\"\"Full inference pipeline: preprocess -> GPU forward -> annotate.\"\"\"
     w, h = pil_img.size
-    img_gray = pil_img.convert("L")
+    img_gray = pil_img.convert('L')
     tensor = TRANSFORM(img_gray).unsqueeze(0)
     t0 = time.time()
     probs = _run_inference(tensor)
@@ -123,77 +120,73 @@ def _infer(pil_img, filename, threshold):
                 break
     annotated_b64 = _annotate_b64(pil_img, pred_class, confidence, objects)
     return {
-        "filename":        filename,
-        "pred_class":      pred_class,
-        "prediction":      CLASS_NAMES[pred_class],
-        "confidence":      round(confidence, 6),
-        "prob_oil":        round(float(probs[1]), 6),
-        "prob_clean":      round(float(probs[0]), 6),
-        "inference_ms":    round(elapsed_ms, 1),
-        "image_size":      f"{w}x{h}",
-        "objects":         objects,
-        "annotated_image": annotated_b64,
+        'filename':        filename,
+        'pred_class':      pred_class,
+        'prediction':      CLASS_NAMES[pred_class],
+        'confidence':      round(confidence, 6),
+        'prob_oil':        round(float(probs[1]), 6),
+        'prob_clean':      round(float(probs[0]), 6),
+        'inference_ms':    round(elapsed_ms, 1),
+        'image_size':      f'{w}x{h}',
+        'objects':         objects,
+        'annotated_image': annotated_b64,
     }
 
 
-# Minimal Gradio UI required for HF Spaces to detect app
-with gr.Blocks(title="OilSight - SAR Oil Spill Detector") as demo:
+with gr.Blocks(title='OilSight - SAR Oil Spill Detector') as demo:
     gr.HTML(
-        \"\"\"<div style='text-align:center;padding:2rem;color:#93c5fd;font-family:sans-serif;'>
-        <h2>OilSight SAR Oil Spill Detector</h2>
-        <p>Loading custom interface...
-           <a href='/' style='color:#60a5fa;'>Click here if not redirected</a></p>
-        </div>\"\"\"
+        "<div style='text-align:center;padding:2rem;color:#93c5fd;font-family:sans-serif;'>"
+        "<h2>OilSight SAR Oil Spill Detector</h2>"
+        "<p>Loading custom interface... "
+        "<a href='/' style='color:#60a5fa;'>Click here if not redirected</a></p>"
+        "</div>"
     )
 
 demo.queue()
-app = demo.app  # FastAPI instance
+app = demo.app
 
-# Serve static files (CSS, JS, etc.)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static_files")
+app.mount('/static', StaticFiles(directory=str(STATIC_DIR)), name='static_files')
 
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+@app.get('/', response_class=HTMLResponse, include_in_schema=False)
 async def root():
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / 'index.html')
 
 
-@app.get("/health")
+@app.get('/health')
 async def health():
-    return {"status": "ok", "model_loaded": _model is not None}
+    return {'status': 'ok', 'model_loaded': _model is not None}
 
 
-@app.post("/predict")
+@app.post('/predict')
 async def predict_single(
     file: UploadFile = File(...),
     threshold: float = Form(default=0.5),
 ):
-    \"\"\"Single image inference.\"\"\"
     raw = await file.read()
     try:
         img = Image.open(io.BytesIO(raw))
     except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid image file."})
-    return JSONResponse(content=_infer(img, file.filename or "upload.jpg", threshold))
+        return JSONResponse(status_code=400, content={'error': 'Invalid image file.'})
+    return JSONResponse(content=_infer(img, file.filename or 'upload.jpg', threshold))
 
 
-@app.post("/predict/batch")
+@app.post('/predict/batch')
 async def predict_batch(
     files: list[UploadFile] = File(...),
     threshold: float = Form(default=0.5),
 ):
-    \"\"\"Batch image inference.\"\"\"
     results = []
     for f in files:
         raw = await f.read()
         try:
             img = Image.open(io.BytesIO(raw))
         except Exception:
-            results.append({"filename": f.filename, "error": "Invalid image file - skipped."})
+            results.append({'filename': f.filename, 'error': 'Invalid image file - skipped.'})
             continue
-        results.append(_infer(img, f.filename or "upload.jpg", threshold))
+        results.append(_infer(img, f.filename or 'upload.jpg', threshold))
     return JSONResponse(content=results)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     demo.launch()
