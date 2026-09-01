@@ -104,17 +104,26 @@ def _resolve_objects(filename: str) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Reusable GPU inference + metadata lookup function
+# Single @spaces.GPU function - runs model forward pass on GPU
 # ---------------------------------------------------------------------------
 @spaces.GPU
-def predict_with_location(pil_img, image_id, threshold=0.5):
+def _run_model(tensor):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     _model.to(device)
-    img_gray = pil_img.convert('L')
-    tensor = TRANSFORM(img_gray).unsqueeze(0).to(device)
+    tensor = tensor.to(device)
     with torch.no_grad():
         logits = _model(tensor)
         probs = F.softmax(logits, dim=1)[0].cpu().tolist()
+    return probs
+
+
+# ---------------------------------------------------------------------------
+# Reusable inference + metadata lookup function
+# ---------------------------------------------------------------------------
+def predict_with_location(pil_img, image_id, threshold=0.5):
+    img_gray = pil_img.convert('L')
+    tensor = TRANSFORM(img_gray).unsqueeze(0)
+    probs = _run_model(tensor)
     prob_oil = probs[1]
     prob_no_oil = probs[0]
     oil_detected = prob_oil >= threshold
@@ -161,11 +170,11 @@ def predict_with_location(pil_img, image_id, threshold=0.5):
 # ---------------------------------------------------------------------------
 @app.post('/api/predict')
 @app.post('/predict')
-async def api_predict(
+def api_predict(
     file: UploadFile = File(...),
     threshold: float = Form(default=0.5),
 ):
-    raw = await file.read()
+    raw = file.file.read()
     try:
         pil_img = Image.open(io.BytesIO(raw))
     except Exception:
@@ -180,7 +189,7 @@ async def api_predict(
 
 @app.get('/api/health')
 @app.get('/health')
-async def api_health():
+def api_health():
     return JSONResponse(content={
         'status': 'ok',
         'model': 'cnn_swin_v2_best.pth',
@@ -191,7 +200,6 @@ async def api_health():
 # ---------------------------------------------------------------------------
 # 3. Gradio UI & Function
 # ---------------------------------------------------------------------------
-@spaces.GPU
 def predict_oil(image=None, filepath=None, threshold=0.5):
     if image is None and filepath:
         try:
