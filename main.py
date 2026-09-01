@@ -227,4 +227,4 @@ async def predict_batch(
 async def root():
     return FileResponse(STATIC_DIR / "index.html")
 
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="static")
