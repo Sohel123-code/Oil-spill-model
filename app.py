@@ -279,7 +279,7 @@ with gr.Blocks(
     )
 
 # ---------------------------------------------------------------------------
-# Attach REST endpoints to demo.app and launch Gradio cleanly for ZeroGPU
+# Attach REST endpoints to demo.app and register via startup event & add_api_route
 # ---------------------------------------------------------------------------
 demo.queue()
 app = demo.app
@@ -305,10 +305,15 @@ async def api_predict(file: UploadFile = File(...), threshold: float = Form(defa
 async def api_health():
     return JSONResponse(content={'status': 'ok', 'model': 'cnn_swin_v2_best.pth', 'geo_db_size': len(_geo_db)})
 
-app.add_api_route('/api/predict', api_predict, methods=['POST'])
-app.add_api_route('/predict', api_predict, methods=['POST'])
-app.add_api_route('/api/health', api_health, methods=['GET'])
-app.add_api_route('/health', api_health, methods=['GET'])
+@app.on_event('startup')
+def register_routes():
+    app.add_api_route('/api/predict', api_predict, methods=['POST'])
+    app.add_api_route('/predict', api_predict, methods=['POST'])
+    app.add_api_route('/api/health', api_health, methods=['GET'])
+    app.add_api_route('/health', api_health, methods=['GET'])
+
+# Also register immediately
+register_routes()
 
 if __name__ == '__main__':
     demo.launch()
