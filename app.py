@@ -3,14 +3,6 @@
 app.py - OilSight SAR Oil Spill Detector
 Hugging Face ZeroGPU-compatible FastAPI + Gradio application.
 Model: cnn_swin_v2_best.pth (CNNSwinHybrid)
-
-Exposes:
-  - Gradio UI  at /
-  - POST /api/predict  (React JSON endpoint)
-  - GET  /api/health   (Health check)
-
-IMPORTANT: import spaces and @spaces.GPU MUST be at top level
-for HF ZeroGPU runtime to detect them during startup AST scan.
 """
 
 # ZeroGPU: MUST be imported unconditionally at top level
@@ -112,30 +104,17 @@ def _resolve_objects(filename: str) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Core GPU inference (ZeroGPU - top-level required)
+# Reusable GPU inference + metadata lookup function
 # ---------------------------------------------------------------------------
-@spaces.GPU(duration=60)
-def _run_model(tensor: torch.Tensor) -> 'list[float]':
+@spaces.GPU
+def predict_with_location(pil_img, image_id, threshold=0.5):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     _model.to(device)
-    tensor = tensor.to(device)
+    img_gray = pil_img.convert('L')
+    tensor = TRANSFORM(img_gray).unsqueeze(0).to(device)
     with torch.no_grad():
         logits = _model(tensor)
         probs = F.softmax(logits, dim=1)[0].cpu().tolist()
-    return probs
-
-
-# ---------------------------------------------------------------------------
-# Reusable inference + metadata lookup function
-# ---------------------------------------------------------------------------
-def predict_with_location(
-    pil_img: Image.Image,
-    image_id: str,
-    threshold: float = 0.5,
-) -> dict:
-    img_gray = pil_img.convert('L')
-    tensor = TRANSFORM(img_gray).unsqueeze(0)
-    probs = _run_model(tensor)
     prob_oil = probs[1]
     prob_no_oil = probs[0]
     oil_detected = prob_oil >= threshold
@@ -210,9 +189,9 @@ async def api_health():
 
 
 # ---------------------------------------------------------------------------
-# Gradio UI Function (supports optional filepath parameter)
+# Gradio UI Function
 # ---------------------------------------------------------------------------
-@spaces.GPU(duration=60)
+@spaces.GPU
 def predict_oil(image=None, filepath=None, threshold=0.5):
     if image is None and filepath:
         try:
