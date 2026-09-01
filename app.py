@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 app.py - OilSight SAR Oil Spill Detector
-Hugging Face ZeroGPU-compatible FastAPI + Gradio application.
+Hugging Face ZeroGPU-compatible Gradio application.
 Model: cnn_swin_v2_best.pth (CNNSwinHybrid)
 """
 
@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 import gradio as gr
 from PIL import Image, ImageDraw, ImageFont
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,20 +27,6 @@ _model = load_model()
 _model.eval()
 _geo_db = load_geo_db()
 print(f'Geo DB ready - {len(_geo_db)} images indexed.')
-
-# ---------------------------------------------------------------------------
-# 1. Initialize FastAPI app & CORS Middleware
-# ---------------------------------------------------------------------------
-app = FastAPI(title='OilSight SAR Oil Spill Detector API', version='2.1.0')
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=['*'],
-    allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
-)
-
 
 # ---------------------------------------------------------------------------
 # Annotation helper (used by Gradio UI)
@@ -106,7 +92,7 @@ def _resolve_objects(filename: str) -> list:
 # ---------------------------------------------------------------------------
 # Reusable GPU inference + metadata lookup function
 # ---------------------------------------------------------------------------
-@spaces.GPU
+@spaces.GPU(duration=60)
 def predict_with_location(pil_img, image_id, threshold=0.5):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     _model.to(device)
@@ -157,41 +143,9 @@ def predict_with_location(pil_img, image_id, threshold=0.5):
 
 
 # ---------------------------------------------------------------------------
-# FastAPI Endpoints (Primary REST API for React & external clients)
-# ---------------------------------------------------------------------------
-@app.post('/api/predict')
-@app.post('/predict')
-async def api_predict(
-    file: UploadFile = File(...),
-    threshold: float = Form(default=0.5),
-):
-    raw = await file.read()
-    try:
-        pil_img = Image.open(io.BytesIO(raw))
-    except Exception:
-        return JSONResponse(
-            status_code=400,
-            content={'error': 'Invalid image file. Must be JPG, PNG, or TIFF.'},
-        )
-    image_id = file.filename or 'upload.jpg'
-    result = predict_with_location(pil_img, image_id, threshold)
-    return JSONResponse(content=result)
-
-
-@app.get('/api/health')
-@app.get('/health')
-async def api_health():
-    return JSONResponse(content={
-        'status': 'ok',
-        'model': 'cnn_swin_v2_best.pth',
-        'geo_db_size': len(_geo_db),
-    })
-
-
-# ---------------------------------------------------------------------------
 # Gradio UI Function
 # ---------------------------------------------------------------------------
-@spaces.GPU
+@spaces.GPU(duration=60)
 def predict_oil(image=None, filepath=None, threshold=0.5):
     if image is None and filepath:
         try:
@@ -324,12 +278,37 @@ with gr.Blocks(
         'Dataset: Sentinel-1 SAR - Classes: No Oil (0) / Oil Spill (1)*'
     )
 
+# ---------------------------------------------------------------------------
+# Attach REST endpoints to demo.app and launch Gradio cleanly for ZeroGPU
+# ---------------------------------------------------------------------------
+demo.queue()
+app = demo.app
 
-# ---------------------------------------------------------------------------
-# 2. Mount Gradio onto FastAPI app so BOTH FastAPI & Gradio run together
-# ---------------------------------------------------------------------------
-app = gr.mount_gradio_app(app, demo, path='/')
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
+async def api_predict(file: UploadFile = File(...), threshold: float = Form(default=0.5)):
+    raw = await file.read()
+    try:
+        pil_img = Image.open(io.BytesIO(raw))
+    except Exception:
+        return JSONResponse(status_code=400, content={'error': 'Invalid image file.'})
+    image_id = file.filename or 'upload.jpg'
+    result = predict_with_location(pil_img, image_id, threshold)
+    return JSONResponse(content=result)
+
+async def api_health():
+    return JSONResponse(content={'status': 'ok', 'model': 'cnn_swin_v2_best.pth', 'geo_db_size': len(_geo_db)})
+
+app.add_api_route('/api/predict', api_predict, methods=['POST'])
+app.add_api_route('/predict', api_predict, methods=['POST'])
+app.add_api_route('/api/health', api_health, methods=['GET'])
+app.add_api_route('/health', api_health, methods=['GET'])
 
 if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=7860)
+    demo.launch()
