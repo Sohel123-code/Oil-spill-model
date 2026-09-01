@@ -709,16 +709,23 @@ body {
 
 /* ══════════════ FULL IMAGE LIGHTBOX ══════════════ */
 .lightbox-backdrop {
-  display: none !important;
+  display: flex;
   position: fixed; inset: 0;
   background: rgba(7, 17, 38, 0.9);
   backdrop-filter: blur(8px);
   z-index: 1000;
   align-items: center; justify-content: center;
   padding: 1.5rem;
+  /* Hidden by default via visibility + pointer-events (avoids !important conflicts) */
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s var(--ease), visibility .2s var(--ease);
 }
 .lightbox-backdrop.open {
-  display: flex !important;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
   animation: fadeIn .2s var(--ease);
 }
 

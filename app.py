@@ -2,12 +2,9 @@
 """
 app.py - OilSight SAR Oil Spill Detector (Hugging Face Spaces)
 
-Serves the identical HTML/CSS/JS frontend as localhost by mounting
-FastAPI custom routes on top of the Gradio app instance.
+The custom HTML/CSS/JS frontend is served at /ui.
+A fullscreen iframe in gr.HTML overlays the Gradio page entirely.
 ZeroGPU is preserved via @spaces.GPU on the inference function.
-
-IMPORTANT: import spaces and @spaces.GPU MUST be at top level
-for HF ZeroGPU runtime to detect them during startup AST scan.
 """
 
 # ZeroGPU: MUST be imported unconditionally at top level
@@ -133,23 +130,34 @@ def _infer(pil_img, filename, threshold):
     }
 
 
+# ---------------------------------------------------------------------------
+# Gradio UI - fullscreen iframe that overlays the entire Gradio page
+# The real frontend is served at /ui by the FastAPI routes below.
+# ---------------------------------------------------------------------------
+_IFRAME_HTML = (
+    '<style>'
+    'body,html{margin:0;padding:0;overflow:hidden;}'
+    '.gradio-container{padding:0!important;margin:0!important;max-width:100%!important;}'
+    'footer,.footer,#footer{display:none!important;}'
+    '</style>'
+    '<iframe src="/ui"'
+    ' style="position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;z-index:99999;"'
+    ' allow="cross-origin-isolated">'
+    '</iframe>'
+)
+
 with gr.Blocks(title='OilSight - SAR Oil Spill Detector') as demo:
-    gr.HTML(
-        "<div style='text-align:center;padding:2rem;color:#93c5fd;font-family:sans-serif;'>"
-        "<h2>OilSight SAR Oil Spill Detector</h2>"
-        "<p>Loading custom interface... "
-        "<a href='/' style='color:#60a5fa;'>Click here if not redirected</a></p>"
-        "</div>"
-    )
+    gr.HTML(_IFRAME_HTML)
 
 demo.queue()
 app = demo.app
 
+# Serve static assets (CSS, JS)
 app.mount('/static', StaticFiles(directory=str(STATIC_DIR)), name='static_files')
 
 
-@app.get('/', response_class=HTMLResponse, include_in_schema=False)
-async def root():
+@app.get('/ui', response_class=HTMLResponse, include_in_schema=False)
+async def ui():
     return FileResponse(STATIC_DIR / 'index.html')
 
 

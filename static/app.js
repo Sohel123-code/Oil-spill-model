@@ -4,6 +4,7 @@
  * Bold Typography, JetBrains Mono numbers, Full Image Lightbox, and Single-Click Download
  */
 
+// Use absolute path so requests resolve correctly inside HF Spaces iframe
 const API = '/predict/batch';
 const MAX_THUMBS = 8;
 
@@ -344,7 +345,10 @@ function buildResultCard(r, idx) {
   if (imgWrap) imgWrap.onclick = () => openLightbox(r);
 
   const fullViewBtn = card.querySelector('.btn-fullview');
-  if (fullViewBtn) fullViewBtn.onclick = () => openLightbox(r);
+  if (fullViewBtn) fullViewBtn.onclick = (e) => {
+    e.stopPropagation(); // prevent bubbling to imgWrap which also calls openLightbox
+    openLightbox(r);
+  };
 
   const dlBtn = card.querySelector('.btn-download');
   if (dlBtn && r.annotated_image) {
@@ -368,10 +372,13 @@ function openLightbox(r) {
   lightboxBadge.textContent = `${isOil ? '🛢️ Oil Spill' : '✅ Clean'} (${((r.confidence || 0) * 100).toFixed(1)}%)`;
   lightboxBadge.className = `lightbox-badge ${isOil ? '' : 'clean'}`;
 
-  updateLightboxView();
-
+  // Make backdrop visible FIRST so the browser renders the element
+  // before we set img.src — ensures image loads correctly
   lightboxBackdrop.classList.add('open');
   document.body.style.overflow = 'hidden';
+
+  // Set image after element is visible
+  requestAnimationFrame(() => updateLightboxView());
 }
 
 function updateLightboxView() {
@@ -381,11 +388,13 @@ function updateLightboxView() {
   if (currentLightboxMode === 'annotated' && r.annotated_image) {
     lightboxImg.src = r.annotated_image;
     lightboxToggle.innerHTML = '<span>⇄ View Raw Original</span>';
-    lightboxMeta.textContent = `Dimension: ${r.image_size} · Showing detected spill bounding boxes`;
+    lightboxMeta.textContent = `Dimension: ${r.image_size || '—'} · Showing detected spill bounding boxes`;
   } else {
-    lightboxImg.src = r.raw_image_url || r.annotated_image;
+    // Fallback: if raw_image_url is empty string, always use annotated_image
+    const src = r.raw_image_url || r.annotated_image || '';
+    lightboxImg.src = src;
     lightboxToggle.innerHTML = '<span>⇄ View Detected Boxes</span>';
-    lightboxMeta.textContent = `Dimension: ${r.image_size} · Showing unprocessed raw SAR image`;
+    lightboxMeta.textContent = `Dimension: ${r.image_size || '—'} · Showing unprocessed raw SAR image`;
   }
 }
 
