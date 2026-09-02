@@ -44,6 +44,8 @@ def _annotate(pil_img, pred_class, confidence, objects):
         font_small = ImageFont.load_default()
     is_oil = (pred_class == 1)
     for i, obj in enumerate(objects, 1):
+        if not is_oil:
+            break
         pw = obj.get('patch_width', w) or w
         ph = obj.get('patch_height', h) or h
         sx, sy = w / pw, h / ph

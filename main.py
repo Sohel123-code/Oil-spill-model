@@ -94,8 +94,8 @@ def annotate_image(
 
     is_oil = (pred_class == 1)
 
-    # 1. Draw object bounding boxes if available
-    if objects:
+    # 1. Draw object bounding boxes if available and oil detected
+    if objects and is_oil:
         for i, obj in enumerate(objects, 1):
             pw = obj.get("patch_width", w) or w
             ph = obj.get("patch_height", h) or h
