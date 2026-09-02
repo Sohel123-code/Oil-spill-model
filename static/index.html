@@ -68,6 +68,19 @@
       <!-- Preview thumbnails (populated by JS) -->
       <div class="preview-row" id="preview-row"></div>
 
+      <!-- Selection toolbar (shown after files selected) -->
+      <div class="select-toolbar" id="select-toolbar">
+        <div class="select-toolbar-left">
+          <button class="btn-select-all" id="btn-select-all" type="button">
+            <span class="select-check">☑</span> Select All
+          </button>
+          <button class="btn-deselect-all" id="btn-deselect-all" type="button">
+            <span class="select-check">☐</span> Deselect All
+          </button>
+        </div>
+        <div class="select-count" id="select-count">0 of 0 selected</div>
+      </div>
+
       <!-- Threshold + Analyse button (shown after files selected) -->
       <div class="action-bar" id="action-bar">
         <div class="threshold-group">
@@ -94,25 +107,51 @@
 
     <!-- Summary Bar -->
     <div class="section-card summary-section" id="summary-section">
-      <div class="summary-grid">
-        <div class="summary-item">
-          <span class="summary-num" id="stat-total">0</span>
-          <span class="summary-label">Total</span>
+      <div class="summary-top-row">
+        <!-- Donut Chart -->
+        <div class="summary-donut-wrap">
+          <svg class="summary-donut" viewBox="0 0 120 120" id="summary-donut">
+            <circle class="donut-bg" cx="60" cy="60" r="52" />
+            <circle class="donut-oil" id="donut-oil" cx="60" cy="60" r="52" />
+            <circle class="donut-clean" id="donut-clean" cx="60" cy="60" r="52" />
+            <text class="donut-center-num" id="donut-center-num" x="60" y="55" text-anchor="middle" dominant-baseline="central">0</text>
+            <text class="donut-center-label" x="60" y="72" text-anchor="middle" dominant-baseline="central">images</text>
+          </svg>
         </div>
-        <div class="summary-item summary-oil">
-          <span class="summary-num" id="stat-oil">0</span>
-          <span class="summary-label">🛢️ Oil Spill</span>
+
+        <!-- Stats Grid -->
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span class="summary-num" id="stat-total">0</span>
+            <span class="summary-label">Total Analysed</span>
+          </div>
+          <div class="summary-item summary-oil">
+            <span class="summary-num" id="stat-oil">0</span>
+            <span class="summary-label">🛢️ Oil Spill Detected</span>
+          </div>
+          <div class="summary-item summary-clean">
+            <span class="summary-num" id="stat-clean">0</span>
+            <span class="summary-label">✅ Clean / No Spill</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-num" id="stat-avg">—</span>
+            <span class="summary-label">Avg Confidence</span>
+          </div>
         </div>
-        <div class="summary-item summary-clean">
-          <span class="summary-num" id="stat-clean">0</span>
-          <span class="summary-label">✅ Clean</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-num" id="stat-avg">—</span>
-          <span class="summary-label">Avg Confidence</span>
+
+        <!-- Actions -->
+        <div class="summary-actions">
+          <button class="btn-reset" id="reset-btn">↺ New Analysis</button>
         </div>
       </div>
-      <button class="btn-reset" id="reset-btn">↺ New Analysis</button>
+
+      <!-- Filter Buttons -->
+      <div class="filter-bar" id="filter-bar">
+        <span class="filter-label">Filter:</span>
+        <button class="filter-btn active" data-filter="all" id="filter-all">All <span class="filter-count" id="filter-count-all">0</span></button>
+        <button class="filter-btn filter-oil" data-filter="oil" id="filter-oil-btn">🛢️ Oil Spill <span class="filter-count" id="filter-count-oil">0</span></button>
+        <button class="filter-btn filter-clean" data-filter="clean" id="filter-clean-btn">✅ Clean <span class="filter-count" id="filter-count-clean">0</span></button>
+      </div>
     </div>
 
     <!-- Results Grid -->

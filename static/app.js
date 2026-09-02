@@ -1,32 +1,37 @@
 /**
- * app.js — OilSight frontend logic (v2.3)
- * Modern Horizontal Card Layout: Left Image | Right Detailed Metrics & Table
- * Bold Typography, JetBrains Mono numbers, Full Image Lightbox, and Single-Click Download
+ * app.js — OilSight frontend logic (v3.0)
+ * Multi-select checkboxes, donut chart summary, result filtering
  */
 
 // Use absolute path so requests resolve correctly inside HF Spaces iframe
 const API = '/predict/batch';
-const MAX_THUMBS = 8;
+const MAX_THUMBS = 12;
 
-let selectedFiles = [];
+let selectedFiles = [];           // All loaded files
+let checkedIndices = new Set();   // Indices of files the user has ticked
+let lastResults = [];             // Stored for filtering
 
 // ── DOM ELEMENTS ─────────────────────────────────────
-const uploadZone    = document.getElementById('upload-zone');
-const fileInput     = document.getElementById('file-input');
-const uploadTitle   = document.getElementById('upload-title');
-const uploadHint    = document.getElementById('upload-hint');
-const previewRow    = document.getElementById('preview-row');
-const actionBar     = document.getElementById('action-bar');
-const analyseBtn    = document.getElementById('analyse-btn');
-const thresholdSldr = document.getElementById('threshold-slider');
-const thresholdDisp = document.getElementById('threshold-display');
-const loadingSection= document.getElementById('loading-section');
-const loadingText   = document.getElementById('loading-text');
-const summarySection= document.getElementById('summary-section');
-const resultsGrid   = document.getElementById('results-grid');
-const resetBtn      = document.getElementById('reset-btn');
+const uploadZone     = document.getElementById('upload-zone');
+const fileInput      = document.getElementById('file-input');
+const uploadTitle    = document.getElementById('upload-title');
+const uploadHint     = document.getElementById('upload-hint');
+const previewRow     = document.getElementById('preview-row');
+const selectToolbar  = document.getElementById('select-toolbar');
+const btnSelectAll   = document.getElementById('btn-select-all');
+const btnDeselectAll = document.getElementById('btn-deselect-all');
+const selectCountEl  = document.getElementById('select-count');
+const actionBar      = document.getElementById('action-bar');
+const analyseBtn     = document.getElementById('analyse-btn');
+const thresholdSldr  = document.getElementById('threshold-slider');
+const thresholdDisp  = document.getElementById('threshold-display');
+const loadingSection = document.getElementById('loading-section');
+const loadingText    = document.getElementById('loading-text');
+const summarySection = document.getElementById('summary-section');
+const resultsGrid    = document.getElementById('results-grid');
+const resetBtn       = document.getElementById('reset-btn');
 
-// Lightbox Modal (Full Image View)
+// Lightbox Modal
 const lightboxBackdrop = document.getElementById('lightbox-backdrop');
 const lightboxImg      = document.getElementById('lightbox-img');
 const lightboxFilename = document.getElementById('lightbox-filename');
@@ -37,7 +42,7 @@ const lightboxClose    = document.getElementById('lightbox-close');
 const lightboxMeta     = document.getElementById('lightbox-meta');
 
 let currentLightboxData = null;
-let currentLightboxMode = 'annotated'; // 'annotated' or 'raw'
+let currentLightboxMode = 'annotated';
 
 
 // ── THRESHOLD SLIDER ─────────────────────────────────
@@ -78,32 +83,109 @@ function acceptFiles(files) {
   if (!ok.length) return;
   selectedFiles = ok;
 
+  // Default: all checked
+  checkedIndices = new Set(ok.map((_, i) => i));
+
   // Update zone
   uploadZone.classList.add('has-files');
   uploadTitle.textContent = `${ok.length} image${ok.length > 1 ? 's' : ''} selected`;
   uploadHint.innerHTML = 'Click to change selection';
 
-  // Thumbnails
+  // Build thumbnails with checkboxes
+  buildThumbnails();
+
+  // Show toolbar & action bar
+  selectToolbar.classList.add('visible');
+  actionBar.classList.add('visible');
+  updateSelectCount();
+}
+
+
+function buildThumbnails() {
   previewRow.innerHTML = '';
-  ok.slice(0, MAX_THUMBS).forEach(f => {
-    const div = document.createElement('div'); div.className = 'thumb';
+  const showCount = Math.min(selectedFiles.length, MAX_THUMBS);
+
+  selectedFiles.slice(0, showCount).forEach((f, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb' + (checkedIndices.has(i) ? ' checked' : '');
+    div.dataset.index = i;
+
     const img = document.createElement('img');
-    const u   = URL.createObjectURL(f);
+    const u = URL.createObjectURL(f);
     img.src = u; img.alt = f.name; img.onload = () => URL.revokeObjectURL(u);
-    const lbl = document.createElement('div'); lbl.className = 'thumb-label'; lbl.textContent = f.name;
-    div.appendChild(img); div.appendChild(lbl);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'thumb-label';
+    lbl.textContent = f.name;
+
+    const checkbox = document.createElement('div');
+    checkbox.className = 'thumb-check';
+    checkbox.innerHTML = checkedIndices.has(i) ? '✓' : '';
+
+    div.appendChild(img);
+    div.appendChild(lbl);
+    div.appendChild(checkbox);
+
+    // Toggle on click
+    div.addEventListener('click', () => {
+      if (checkedIndices.has(i)) {
+        checkedIndices.delete(i);
+        div.classList.remove('checked');
+        checkbox.innerHTML = '';
+      } else {
+        checkedIndices.add(i);
+        div.classList.add('checked');
+        checkbox.innerHTML = '✓';
+      }
+      updateSelectCount();
+    });
+
     previewRow.appendChild(div);
   });
-  if (ok.length > MAX_THUMBS) {
-    const ex = document.createElement('div'); ex.className = 'thumb-extra';
-    ex.textContent = `+${ok.length - MAX_THUMBS}`;
+
+  // Handle overflow for thumbnails beyond MAX_THUMBS
+  if (selectedFiles.length > MAX_THUMBS) {
+    // For files beyond visible thumbnails, they stay checked by default
+    const ex = document.createElement('div');
+    ex.className = 'thumb-extra';
+    ex.textContent = `+${selectedFiles.length - MAX_THUMBS}`;
     previewRow.appendChild(ex);
   }
-
-  // Show action bar
-  actionBar.classList.add('visible');
-  analyseBtn.disabled = false;
 }
+
+
+function updateSelectCount() {
+  const total = selectedFiles.length;
+  const checked = checkedIndices.size;
+  selectCountEl.textContent = `${checked} of ${total} selected`;
+  analyseBtn.disabled = checked === 0;
+
+  // Update the analyse button label
+  if (checked > 0) {
+    analyseBtn.querySelector('span').textContent = `Analyse ${checked} Image${checked > 1 ? 's' : ''}`;
+  }
+}
+
+
+// ── SELECT ALL / DESELECT ALL ────────────────────────
+btnSelectAll.addEventListener('click', () => {
+  checkedIndices = new Set(selectedFiles.map((_, i) => i));
+  // Update visible thumb checkboxes
+  previewRow.querySelectorAll('.thumb').forEach(div => {
+    div.classList.add('checked');
+    div.querySelector('.thumb-check').innerHTML = '✓';
+  });
+  updateSelectCount();
+});
+
+btnDeselectAll.addEventListener('click', () => {
+  checkedIndices.clear();
+  previewRow.querySelectorAll('.thumb').forEach(div => {
+    div.classList.remove('checked');
+    div.querySelector('.thumb-check').innerHTML = '';
+  });
+  updateSelectCount();
+});
 
 
 // ── DOWNLOAD HELPER ──────────────────────────────────
@@ -122,17 +204,20 @@ function downloadImage(dataUrl, filename, prefix = 'detected') {
 analyseBtn.addEventListener('click', analyse);
 
 async function analyse() {
-  if (!selectedFiles.length) return;
+  if (!checkedIndices.size) return;
+
+  // Collect only selected files
+  const filesToSend = [...checkedIndices].sort((a,b) => a-b).map(i => selectedFiles[i]);
 
   // UI states
   analyseBtn.disabled = true;
   loadingSection.classList.add('visible');
-  loadingText.textContent = `Analysing & mapping spill coordinates for ${selectedFiles.length} image${selectedFiles.length > 1 ? 's' : ''}…`;
+  loadingText.textContent = `Analysing & mapping spill coordinates for ${filesToSend.length} image${filesToSend.length > 1 ? 's' : ''}…`;
   summarySection.classList.remove('visible');
   resultsGrid.innerHTML = '';
 
   const form = new FormData();
-  selectedFiles.forEach(f => form.append('files', f));
+  filesToSend.forEach(f => form.append('files', f));
   form.append('threshold', parseFloat(thresholdSldr.value).toFixed(2));
 
   try {
@@ -152,6 +237,7 @@ async function analyse() {
 function showResults(results) {
   loadingSection.classList.remove('visible');
   analyseBtn.disabled = false;
+  lastResults = results;
 
   // Summary statistics
   const n  = results.length;
@@ -163,9 +249,26 @@ function showResults(results) {
   document.getElementById('stat-oil').textContent   = nO;
   document.getElementById('stat-clean').textContent = nC;
   document.getElementById('stat-avg').textContent   = avg;
+
+  // Update donut chart
+  updateDonut(nO, nC, n);
+
+  // Update filter counts
+  document.getElementById('filter-count-all').textContent   = n;
+  document.getElementById('filter-count-oil').textContent   = nO;
+  document.getElementById('filter-count-clean').textContent = nC;
+
+  // Reset filter to "all"
+  setActiveFilter('all');
+
   summarySection.classList.add('visible');
 
-  // Build full-width side-by-side cards
+  // Build result cards
+  renderResultCards(results);
+}
+
+
+function renderResultCards(results) {
   resultsGrid.innerHTML = '';
   results.forEach((r, i) => resultsGrid.appendChild(buildResultCard(r, i)));
 
@@ -177,6 +280,60 @@ function showResults(results) {
       });
     }, 60);
   });
+}
+
+
+// ── DONUT CHART ──────────────────────────────────────
+function updateDonut(nOil, nClean, total) {
+  const circumference = 2 * Math.PI * 52; // r=52
+  const donutOil   = document.getElementById('donut-oil');
+  const donutClean = document.getElementById('donut-clean');
+  const centerNum  = document.getElementById('donut-center-num');
+
+  centerNum.textContent = total;
+
+  if (total === 0) {
+    donutOil.style.strokeDasharray   = `0 ${circumference}`;
+    donutClean.style.strokeDasharray = `0 ${circumference}`;
+    return;
+  }
+
+  const oilLen   = (nOil / total) * circumference;
+  const cleanLen = (nClean / total) * circumference;
+
+  donutOil.style.strokeDasharray   = `${oilLen} ${circumference - oilLen}`;
+  donutOil.style.strokeDashoffset  = `${circumference * 0.25}`;  // start from top
+
+  donutClean.style.strokeDasharray  = `${cleanLen} ${circumference - cleanLen}`;
+  donutClean.style.strokeDashoffset = `${circumference * 0.25 - oilLen}`;
+}
+
+
+// ── FILTER BUTTONS ───────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filter = btn.dataset.filter;
+    setActiveFilter(filter);
+    applyFilter(filter);
+  });
+});
+
+function setActiveFilter(filter) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.querySelector(`.filter-btn[data-filter="${filter}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
+function applyFilter(filter) {
+  let filtered;
+  if (filter === 'oil') {
+    filtered = lastResults.filter(r => r.pred_class === 1);
+  } else if (filter === 'clean') {
+    filtered = lastResults.filter(r => r.pred_class !== 1);
+  } else {
+    filtered = lastResults;
+  }
+  renderResultCards(filtered);
 }
 
 
@@ -346,7 +503,7 @@ function buildResultCard(r, idx) {
 
   const fullViewBtn = card.querySelector('.btn-fullview');
   if (fullViewBtn) fullViewBtn.onclick = (e) => {
-    e.stopPropagation(); // prevent bubbling to imgWrap which also calls openLightbox
+    e.stopPropagation();
     openLightbox(r);
   };
 
@@ -372,12 +529,9 @@ function openLightbox(r) {
   lightboxBadge.textContent = `${isOil ? '🛢️ Oil Spill' : '✅ Clean'} (${((r.confidence || 0) * 100).toFixed(1)}%)`;
   lightboxBadge.className = `lightbox-badge ${isOil ? '' : 'clean'}`;
 
-  // Make backdrop visible FIRST so the browser renders the element
-  // before we set img.src — ensures image loads correctly
   lightboxBackdrop.classList.add('open');
   document.body.style.overflow = 'hidden';
 
-  // Set image after element is visible
   requestAnimationFrame(() => updateLightboxView());
 }
 
@@ -390,7 +544,6 @@ function updateLightboxView() {
     lightboxToggle.innerHTML = '<span>⇄ View Raw Original</span>';
     lightboxMeta.textContent = `Dimension: ${r.image_size || '—'} · Showing detected spill bounding boxes`;
   } else {
-    // Fallback: if raw_image_url is empty string, always use annotated_image
     const src = r.raw_image_url || r.annotated_image || '';
     lightboxImg.src = src;
     lightboxToggle.innerHTML = '<span>⇄ View Detected Boxes</span>';
@@ -398,14 +551,12 @@ function updateLightboxView() {
   }
 }
 
-// Lightbox Toggle button
 lightboxToggle.addEventListener('click', () => {
   if (!currentLightboxData || !currentLightboxData.annotated_image || !currentLightboxData.raw_image_url) return;
   currentLightboxMode = (currentLightboxMode === 'annotated') ? 'raw' : 'annotated';
   updateLightboxView();
 });
 
-// Lightbox Download button
 lightboxDlBtn.addEventListener('click', () => {
   if (!currentLightboxData) return;
   const r = currentLightboxData;
@@ -437,13 +588,17 @@ document.addEventListener('keydown', e => {
 // ── RESET ────────────────────────────────────────────
 resetBtn.addEventListener('click', () => {
   selectedFiles = [];
+  checkedIndices.clear();
+  lastResults = [];
   fileInput.value = '';
   previewRow.innerHTML = '';
   resultsGrid.innerHTML = '';
+  selectToolbar.classList.remove('visible');
   actionBar.classList.remove('visible');
   summarySection.classList.remove('visible');
   loadingSection.classList.remove('visible');
   analyseBtn.disabled = true;
+  analyseBtn.querySelector('span').textContent = 'Analyse Images';
   uploadZone.classList.remove('has-files');
   uploadTitle.textContent = 'Drag & drop images here';
   uploadHint.innerHTML = 'or <u>click to browse</u> · JPG, PNG, TIFF, BMP';
